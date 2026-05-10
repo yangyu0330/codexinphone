@@ -1,7 +1,8 @@
 param(
     [string]$TaskName = "CodexInPhone",
     [string]$ProjectPath = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
-    [switch]$AtStartup
+    [switch]$AtStartup,
+    [switch]$KeepAwake
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,9 +12,14 @@ if (-not (Test-Path -LiteralPath $scriptPath)) {
     throw "Missing start script: $scriptPath"
 }
 
+$startArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -ProjectPath `"$ProjectPath`""
+if ($KeepAwake) {
+    $startArgs += " -KeepAwake"
+}
+
 $action = New-ScheduledTaskAction `
     -Execute "powershell.exe" `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -ProjectPath `"$ProjectPath`""
+    -Argument $startArgs
 
 if ($AtStartup) {
     $trigger = New-ScheduledTaskTrigger -AtStartup
@@ -38,4 +44,7 @@ Register-ScheduledTask `
     -Force | Out-Null
 
 Write-Host "Registered scheduled task '$TaskName'."
+if ($KeepAwake) {
+    Write-Host "KeepAwake will be enabled while the task process is running."
+}
 Write-Host "Run it now with: Start-ScheduledTask -TaskName '$TaskName'"

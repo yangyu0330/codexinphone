@@ -108,6 +108,19 @@ powershell -ExecutionPolicy Bypass -File .\scripts\remove-windows-task.ps1
 
 로그는 `logs/`에 저장됩니다.
 
+## 외출 모드
+
+노트북을 켜두고 밖에서 휴대폰으로 계속 Codex를 쓰려면 [docs/AWAY_MODE_KO.md](docs/AWAY_MODE_KO.md)의 절차를 따릅니다.
+
+떠나기 전 점검:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\away-preflight.ps1 -RegisterTask -KeepAwake
+powershell -ExecutionPolicy Bypass -File .\scripts\away-preflight.ps1 -StartTask
+```
+
+`Failures: 0`이어야 밖에서 안정적으로 사용할 준비가 된 상태입니다.
+
 ## AI API 키와 프로필
 
 가장 단순한 방식은 `.env`에 `OPENAI_API_KEY` 등 필요한 키를 넣는 것입니다. 서버는 키 존재 여부만 UI에 보여주고 실제 값은 표시하지 않습니다.

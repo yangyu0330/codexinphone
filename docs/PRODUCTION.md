@@ -41,8 +41,15 @@ npm run check:prod-config
 Then register the Windows scheduled task:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows-task.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows-task.ps1 -KeepAwake
 Start-ScheduledTask -TaskName CodexInPhone
+```
+
+For a full leaving-the-laptop-on checklist, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\away-preflight.ps1 -RegisterTask -KeepAwake
+powershell -ExecutionPolicy Bypass -File .\scripts\away-preflight.ps1 -StartTask
 ```
 
 ## Runtime Guarantees
