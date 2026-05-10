@@ -1,0 +1,4 @@
+{
+  "OPENAI_API_KEY": "paste-key-here",
+  "CODEX_MODEL": "gpt-5.1-codex"
+}
