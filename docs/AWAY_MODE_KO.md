@@ -111,3 +111,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\away-preflight.ps1 -StartTask
 ```
 
 `Failures: 0`이면 구현 측면에서는 외출 모드 준비가 끝난 상태입니다. 경고가 남아 있으면 원격 접속 주소나 터널 설정을 다시 확인하세요.
+## 앱처럼 설치
+
+이 프로젝트는 PWA입니다. Android Chrome에서는 접속 후 `Install app` 버튼이 보이면 눌러서 홈 화면 앱처럼 설치할 수 있습니다.
+iPhone은 Safari에서 공유 버튼을 누른 뒤 `홈 화면에 추가`를 선택합니다.
+
+설치된 앱도 노트북 서버와 터널이 켜져 있어야 동작합니다. 임시 터널 주소가 바뀌면 새 주소로 다시 열어 설치하거나, Tailscale/Cloudflare Tunnel 고정 주소를 사용하세요.

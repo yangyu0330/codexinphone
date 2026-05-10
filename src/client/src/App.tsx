@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
+  Download,
   KeyRound,
   Loader2,
   LogOut,
@@ -29,6 +30,10 @@ import type {
 const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
 type ConnectionState = "connecting" | "open" | "closed";
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
 
 export function App() {
   const terminalRef = useRef<TerminalPaneHandle | null>(null);
@@ -47,6 +52,12 @@ export function App() {
   const [mobileInput, setMobileInput] = useState("");
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [lastError, setLastError] = useState<string | undefined>();
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [standalone, setStandalone] = useState(
+    () =>
+      window.matchMedia("(display-mode: standalone)").matches ||
+      Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone)
+  );
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId),
@@ -55,6 +66,7 @@ export function App() {
 
   const userId = user?.id;
   const connected = connection === "open";
+  const canInstall = Boolean(installPrompt) && !standalone;
 
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
@@ -167,6 +179,34 @@ export function App() {
     return () => socketRef.current?.close();
   }, [connectSocket, user]);
 
+  useEffect(() => {
+    function onBeforeInstallPrompt(event: Event) {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    }
+
+    function onAppInstalled() {
+      setInstallPrompt(null);
+      setStandalone(true);
+    }
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onAppInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onAppInstalled);
+    };
+  }, []);
+
+  async function installApp() {
+    if (!installPrompt) {
+      return;
+    }
+    await installPrompt.prompt();
+    await installPrompt.userChoice.catch(() => undefined);
+    setInstallPrompt(null);
+  }
+
   function startSession() {
     const dimensions = terminalRef.current?.dimensions() ?? { cols: 90, rows: 28 };
     send({
@@ -246,6 +286,12 @@ export function App() {
           </div>
 
           <div className="authActions">
+            {canInstall && (
+              <button className="ghostButton" type="button" onClick={() => void installApp()}>
+                <Download size={18} />
+                Install app
+              </button>
+            )}
             {config.authMode === "github" && (
               <a className="primaryButton" href="/auth/github">
                 <KeyRound size={18} />
@@ -313,6 +359,11 @@ export function App() {
           <button className="iconButton" type="button" onClick={connectSocket} title="Reconnect">
             <RefreshCw size={18} />
           </button>
+          {canInstall && (
+            <button className="iconButton" type="button" onClick={() => void installApp()} title="Install app">
+              <Download size={18} />
+            </button>
+          )}
           <button className="iconButton" type="button" onClick={() => void doLogout()} title="Logout">
             <LogOut size={18} />
           </button>
@@ -432,6 +483,7 @@ export function App() {
             <input
               value={mobileInput}
               onChange={(event) => setMobileInput(event.target.value)}
+              aria-label="Message input"
               placeholder="휴대폰 키보드 입력"
               disabled={!activeSessionId}
             />
