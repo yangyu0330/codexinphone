@@ -65,6 +65,17 @@ powershell -ExecutionPolicy Bypass -File .\scripts\away-preflight.ps1 -StartTask
 
 `KeepAwake`는 Codex in Phone 작업이 실행되는 동안 Windows가 절전으로 들어가지 않도록 요청합니다.
 
+## 임시 빠른 외출 모드
+
+OAuth와 고정 터널을 아직 만들지 않았지만 잠깐 밖에서 써야 한다면 Cloudflare quick tunnel과 pairing token 모드를 사용할 수 있습니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-remote-access.ps1 -Provider cloudflared
+powershell -ExecutionPolicy Bypass -File .\scripts\start-away-quick-tunnel.ps1
+```
+
+스크립트가 휴대폰 URL과 pairing token을 출력합니다. 이 방식은 임시 공개 URL을 사용하므로 장기 운영은 GitHub OAuth + Cloudflare Access 또는 Tailscale을 쓰세요.
+
 ## 4. 휴대폰에서 사용
 
 휴대폰 브라우저에서 `PUBLIC_ORIGIN` 주소를 열고 GitHub OAuth로 로그인합니다.
