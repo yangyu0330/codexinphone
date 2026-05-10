@@ -82,6 +82,24 @@ function boolFromEnv(name: string, fallback: boolean): boolean {
   return value === "true";
 }
 
+function trustProxyFromEnv(): boolean | number | string {
+  const value = process.env.TRUST_PROXY?.trim();
+  if (!value || value === "false") {
+    return false;
+  }
+  if (value === "true") {
+    return true;
+  }
+  if (/^\d+$/.test(value)) {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      throw new Error("TRUST_PROXY numeric value must be a positive integer.");
+    }
+    return parsed;
+  }
+  return value;
+}
+
 function intFromEnv(name: string, fallback: number): number {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -138,7 +156,7 @@ export const config = {
   authMode,
   sessionSecret: buildSecret(),
   cookieSecure,
-  trustProxy: boolFromEnv("TRUST_PROXY", false),
+  trustProxy: trustProxyFromEnv(),
   github: {
     clientId: process.env.GITHUB_CLIENT_ID?.trim() || "",
     clientSecret: process.env.GITHUB_CLIENT_SECRET?.trim() || "",
@@ -195,6 +213,9 @@ export function productionConfigIssues(): string[] {
   }
   if (config.host === "0.0.0.0" || config.host === "::") {
     issues.push("HOST should stay on 127.0.0.1 behind Tailscale or Cloudflare Tunnel.");
+  }
+  if (config.trustProxy === true) {
+    issues.push("TRUST_PROXY=true is too broad for rate limiting. Use TRUST_PROXY=1 behind a single tunnel proxy.");
   }
 
   return issues;

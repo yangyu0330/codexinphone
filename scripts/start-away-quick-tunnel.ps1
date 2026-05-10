@@ -150,6 +150,7 @@ Set-DotEnvValue $envPath "NODE_ENV" "production"
 Set-DotEnvValue $envPath "AUTH_MODE" "token"
 Set-DotEnvValue $envPath "PUBLIC_ORIGIN" $publicOrigin
 Set-DotEnvValue $envPath "COOKIE_SECURE" "true"
+Set-DotEnvValue $envPath "TRUST_PROXY" "1"
 Set-DotEnvValue $envPath "GITHUB_CALLBACK_URL" "$publicOrigin/auth/github/callback"
 Set-DotEnvValue $envPath "WORKSPACE_ROOTS" $env:USERPROFILE
 Set-DotEnvValue $envPath "DEFAULT_CWD" $env:USERPROFILE
