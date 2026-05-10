@@ -10,6 +10,7 @@ Codex in Phone exposes a local terminal-like interface to a phone. Treat it as a
 - Use HTTPS for any non-local phone access.
 - Keep `.env` out of git.
 - Rotate `SESSION_SECRET` and OAuth secrets if a laptop is lost.
+- Run `npm run check:prod-config` before production startup.
 
 ## Explicitly unsupported
 
@@ -18,6 +19,15 @@ Codex in Phone exposes a local terminal-like interface to a phone. Treat it as a
 - Storing API keys in browser localStorage
 - Reusing browser cookies from ChatGPT, OpenAI, or Codex web sessions
 - Running the service as Administrator for normal use
+
+## Runtime protections
+
+- Helmet security headers and CSP
+- API and auth rate limits
+- Same-origin checks for state-changing HTTP requests
+- WebSocket origin, message size, and message rate checks
+- Signed session cookies
+- Per-user terminal session visibility
 
 ## Logs
 

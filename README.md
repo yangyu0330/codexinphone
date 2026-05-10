@@ -16,6 +16,9 @@ Windows 노트북에서 Codex CLI를 실행하고, 휴대폰 브라우저/PWA로
 - 위험 명령 입력 감지 후 승인 요구
 - 터미널 출력과 감사 로그의 토큰/키 마스킹
 - Windows 작업 스케줄러 자동 실행 스크립트
+- 보안 헤더, CSP, 레이트리밋, same-origin 요청 검증
+- 서명된 세션 쿠키와 사용자별 터미널 세션 격리
+- GitHub Actions CI와 브라우저 E2E 검증
 
 ## 빠른 실행
 
@@ -26,6 +29,13 @@ copy .env.example .env
 npm ci
 npm run build
 npm run start
+```
+
+상용 운영 전에는 `.env`를 채운 뒤 아래 검사를 통과시킵니다.
+
+```powershell
+npm run ci
+npm run check:prod-config
 ```
 
 개발 중 OAuth 없이 확인하려면 `.env`에서 다음처럼 바꿉니다.
@@ -44,7 +54,7 @@ CODEX_ARGS=scripts/mock-codex.js
 
 ```dotenv
 AUTH_MODE=github
-SESSION_SECRET=긴-랜덤-문자열
+SESSION_SECRET=긴-랜덤-문자열-최소-32자
 PUBLIC_ORIGIN=https://your-protected-domain.example.com
 GITHUB_CLIENT_ID=...
 GITHUB_CLIENT_SECRET=...
@@ -115,6 +125,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\remove-windows-task.ps1
 
 ## 보안 정책
 
+운영 모드(`NODE_ENV=production`)에서는 안전하지 않은 설정이면 서버가 시작되지 않습니다. 자세한 체크리스트는 [docs/PRODUCTION.md](docs/PRODUCTION.md)를 보세요.
+
 서버는 다음 입력을 감지하면 바로 실행하지 않고 휴대폰 화면에 승인 배너를 표시합니다.
 
 - `rm -rf`
@@ -132,6 +144,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\remove-windows-task.ps1
 npm run typecheck
 npm test
 npm run build
+npm run verify:browser
 ```
 
 개발용 mock CLI로 전체 흐름을 확인:

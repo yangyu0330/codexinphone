@@ -6,17 +6,31 @@ import { config, publicConfig } from "./config.js";
 import { loginWithPairingToken, logout, requireAuth, currentUser } from "./auth/index.js";
 import { registerGithubAuth } from "./auth/github.js";
 import { ensureDataDirs } from "./sessions/audit-log.js";
-import { createWebSocketServer } from "./ws.js";
+import { createWebSocketServer, validateWebSocketUpgrade } from "./ws.js";
+import {
+  apiRateLimiter,
+  authRateLimiter,
+  requestLogger,
+  sameOriginOnly,
+  securityHeaders
+} from "./security/http.js";
+import { logger } from "./logger.js";
 
 await ensureDataDirs();
 
 const app = express();
 app.disable("x-powered-by");
+app.set("trust proxy", config.trustProxy);
+app.use(requestLogger());
+app.use(securityHeaders());
+app.use(sameOriginOnly);
 app.use(express.json({ limit: "256kb" }));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
+
+app.use("/api", apiRateLimiter);
 
 app.get("/api/config", (_req, res) => {
   res.json(publicConfig());
@@ -31,6 +45,7 @@ app.get("/api/me", (req, res) => {
   res.json({ user });
 });
 
+app.use("/auth", authRateLimiter);
 app.post("/auth/token", loginWithPairingToken);
 app.post("/api/logout", requireAuth, logout);
 registerGithubAuth(app);
@@ -49,14 +64,15 @@ if (fs.existsSync(clientDist)) {
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = error instanceof Error ? error.message : String(error);
-  res.status(500).json({ error: message });
+  logger.error({ error }, "Unhandled request error");
+  res.status(500).json({ error: config.isProduction ? "Internal server error." : message });
 });
 
 const server = http.createServer(app);
 const wss = createWebSocketServer();
 
 server.on("upgrade", (req, socket, head) => {
-  if (!req.url?.startsWith("/ws")) {
+  if (!req.url?.startsWith("/ws") || !validateWebSocketUpgrade(req)) {
     socket.destroy();
     return;
   }
@@ -67,10 +83,11 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 server.listen(config.port, config.host, () => {
-  console.log(
-    `Codex in Phone listening on http://${config.host}:${config.port} (${config.authMode} auth)`
+  logger.info(
+    { host: config.host, port: config.port, authMode: config.authMode },
+    "Codex in Phone listening"
   );
   if (config.host !== "127.0.0.1" && config.host !== "localhost") {
-    console.warn("Security warning: avoid exposing this service directly to the internet.");
+    logger.warn("Security warning: avoid exposing this service directly to the internet.");
   }
 });

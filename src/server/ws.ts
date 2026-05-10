@@ -1,12 +1,13 @@
 import type { IncomingMessage } from "node:http";
-import type { WebSocket } from "ws";
+import type { RawData, WebSocket } from "ws";
 import { WebSocketServer } from "ws";
 import { parse } from "cookie";
 import { config, publicConfig } from "./config.js";
-import { currentUser } from "./auth/index.js";
 import { sessionStore } from "./auth/session-store.js";
 import { sessionManager } from "./sessions/session-manager.js";
-import type { ClientMessage, ServerMessage, UserInfo } from "../shared/messages.js";
+import { isAllowedOrigin } from "./security/http.js";
+import { parseClientMessage } from "./ws-validation.js";
+import type { ServerMessage, UserInfo } from "../shared/messages.js";
 
 type Client = {
   socket: WebSocket;
@@ -41,23 +42,64 @@ function broadcast(clients: Set<Client>, message: ServerMessage): void {
   }
 }
 
+function broadcastToOwner(clients: Set<Client>, ownerUserId: string, message: ServerMessage): void {
+  for (const client of clients) {
+    if (client.user.id === ownerUserId) {
+      send(client.socket, message);
+    }
+  }
+}
+
+function rawDataByteLength(raw: RawData): number {
+  if (typeof raw === "string") {
+    return Buffer.byteLength(raw);
+  }
+  if (Buffer.isBuffer(raw)) {
+    return raw.length;
+  }
+  if (Array.isArray(raw)) {
+    return raw.reduce((total, chunk) => total + chunk.length, 0);
+  }
+  return raw.byteLength;
+}
+
+function rawDataToString(raw: RawData): string {
+  if (typeof raw === "string") {
+    return raw;
+  }
+  if (Buffer.isBuffer(raw)) {
+    return raw.toString("utf8");
+  }
+  if (Array.isArray(raw)) {
+    return Buffer.concat(raw).toString("utf8");
+  }
+  return Buffer.from(raw).toString("utf8");
+}
+
 export function createWebSocketServer(): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
   const clients = new Set<Client>();
 
   sessionManager.addListener({
-    onChunk: (sessionId, chunk) => {
-      broadcast(clients, { type: "terminal:chunk", sessionId, chunk });
+    onChunk: (sessionId, chunk, ownerUserId) => {
+      broadcastToOwner(clients, ownerUserId, { type: "terminal:chunk", sessionId, chunk });
     },
-    onSessionUpdated: (session) => {
-      broadcast(clients, { type: "session:updated", session });
-      broadcast(clients, { type: "session:list", sessions: sessionManager.list() });
+    onSessionUpdated: (session, ownerUserId) => {
+      broadcastToOwner(clients, ownerUserId, { type: "session:updated", session });
+      for (const client of clients) {
+        if (client.user.id === ownerUserId) {
+          send(client.socket, {
+            type: "session:list",
+            sessions: sessionManager.list(client.user.id)
+          });
+        }
+      }
     },
-    onApprovalRequired: (request) => {
-      broadcast(clients, { type: "approval:required", request });
+    onApprovalRequired: (request, ownerUserId) => {
+      broadcastToOwner(clients, ownerUserId, { type: "approval:required", request });
     },
-    onApprovalResolved: (approvalId, approved) => {
-      broadcast(clients, { type: "approval:resolved", approvalId, approved });
+    onApprovalResolved: (approvalId, approved, ownerUserId) => {
+      broadcastToOwner(clients, ownerUserId, { type: "approval:resolved", approvalId, approved });
     }
   });
 
@@ -69,13 +111,31 @@ export function createWebSocketServer(): WebSocketServer {
     }
 
     const client: Client = { socket, user };
+    let windowStartedAt = Date.now();
+    let messageCount = 0;
     clients.add(client);
     send(socket, { type: "hello", config: publicConfig(), user });
-    send(socket, { type: "session:list", sessions: sessionManager.list() });
+    send(socket, { type: "session:list", sessions: sessionManager.list(user.id) });
 
     socket.on("message", async (raw) => {
       try {
-        const message = JSON.parse(raw.toString("utf8")) as ClientMessage;
+        if (rawDataByteLength(raw) > config.security.wsMaxMessageBytes) {
+          socket.close(1009, "Message too large");
+          return;
+        }
+
+        const now = Date.now();
+        if (now - windowStartedAt > config.security.wsRateLimitWindowMs) {
+          windowStartedAt = now;
+          messageCount = 0;
+        }
+        messageCount += 1;
+        if (messageCount > config.security.wsMaxMessagesPerWindow) {
+          socket.close(1008, "Rate limit exceeded");
+          return;
+        }
+
+        const message = parseClientMessage(rawDataToString(raw));
 
         switch (message.type) {
           case "session:create": {
@@ -91,32 +151,32 @@ export function createWebSocketServer(): WebSocketServer {
             send(socket, {
               type: "session:attached",
               session,
-              history: sessionManager.getHistory(session.id)
+              history: sessionManager.getHistory(session.id, client.user.id)
             });
             break;
           }
           case "session:attach": {
             send(socket, {
               type: "session:attached",
-              session: sessionManager.getSummary(message.sessionId),
-              history: sessionManager.getHistory(message.sessionId)
+              session: sessionManager.getSummary(message.sessionId, client.user.id),
+              history: sessionManager.getHistory(message.sessionId, client.user.id)
             });
             break;
           }
           case "stdin:append":
-            sessionManager.appendInput(message.sessionId, message.data);
+            sessionManager.appendInput(message.sessionId, message.data, client.user.id);
             break;
           case "session:resize":
-            sessionManager.resize(message.sessionId, message.cols, message.rows);
+            sessionManager.resize(message.sessionId, message.cols, message.rows, client.user.id);
             break;
           case "session:terminate":
-            sessionManager.terminate(message.sessionId);
+            sessionManager.terminate(message.sessionId, client.user.id);
             break;
           case "approval:approve":
-            sessionManager.approve(message.approvalId, true);
+            sessionManager.approve(message.approvalId, true, client.user.id);
             break;
           case "approval:deny":
-            sessionManager.approve(message.approvalId, false);
+            sessionManager.approve(message.approvalId, false, client.user.id);
             break;
           default:
             send(socket, { type: "error", message: "Unknown message type." });
@@ -133,4 +193,9 @@ export function createWebSocketServer(): WebSocketServer {
   });
 
   return wss;
+}
+
+export function validateWebSocketUpgrade(req: IncomingMessage): boolean {
+  const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+  return isAllowedOrigin(origin);
 }

@@ -14,7 +14,10 @@
     "start": "node dist/server/server/index.js",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
-    "verify:browser": "node scripts/verify-browser.mjs"
+    "verify:browser": "node scripts/verify-browser.mjs",
+    "check:prod-config": "npm run build:server && node scripts/check-production-config.mjs",
+    "audit": "npm audit --audit-level=high",
+    "ci": "npm run typecheck && npm test && npm run build && npm run audit"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.1",
@@ -23,8 +26,12 @@
     "cookie": "^1.0.2",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.5.1",
+    "helmet": "^8.1.0",
     "lucide-react": "^0.562.0",
     "nanoid": "^5.1.6",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "ws": "^8.18.3",

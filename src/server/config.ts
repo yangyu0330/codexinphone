@@ -5,9 +5,11 @@ import dotenv from "dotenv";
 import { z } from "zod";
 import type { AuthMode, PublicConfig } from "../shared/messages.js";
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const authModeSchema = z.enum(["github", "token", "dev"]);
+const nodeEnv = process.env.NODE_ENV || "development";
+const isProduction = nodeEnv === "production";
 
 function splitList(value: string | undefined): string[] {
   return (value ?? "")
@@ -47,13 +49,49 @@ function resolveMaybeRelative(value: string): string {
 }
 
 function buildSecret(): string {
-  if (process.env.SESSION_SECRET?.trim()) {
-    return process.env.SESSION_SECRET.trim();
+  const secret = process.env.SESSION_SECRET?.trim();
+  if (secret) {
+    if (isProduction && secret.length < 32) {
+      throw new Error("SESSION_SECRET must be at least 32 characters in production.");
+    }
+    return secret;
   }
-  if (process.env.NODE_ENV === "production") {
+  if (isProduction) {
     throw new Error("SESSION_SECRET is required in production.");
   }
   return crypto.randomBytes(32).toString("hex");
+}
+
+function isPathInsideRoots(candidate: string, roots: string[]): boolean {
+  const normalizedCandidate =
+    process.platform === "win32" ? path.resolve(candidate).toLowerCase() : path.resolve(candidate);
+
+  return roots.some((root) => {
+    const normalizedRoot =
+      process.platform === "win32" ? path.resolve(root).toLowerCase() : path.resolve(root);
+    const relative = path.relative(normalizedRoot, normalizedCandidate);
+    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  });
+}
+
+function boolFromEnv(name: string, fallback: boolean): boolean {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    return fallback;
+  }
+  return value === "true";
+}
+
+function intFromEnv(name: string, fallback: number): number {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    return fallback;
+  }
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  return parsed;
 }
 
 const host = process.env.HOST?.trim() || "127.0.0.1";
@@ -68,9 +106,14 @@ const normalizedRoots = (workspaceRoots.length ? workspaceRoots : [defaultRoot])
 const defaultCwd = resolveMaybeRelative(process.env.DEFAULT_CWD || normalizedRoots[0] || defaultRoot);
 const authMode = authModeSchema.parse((process.env.AUTH_MODE || "github").toLowerCase()) as AuthMode;
 const publicOrigin = process.env.PUBLIC_ORIGIN?.trim() || `http://${host}:${port}`;
+const publicOriginUrl = new URL(publicOrigin);
 const cookieSecure = (process.env.COOKIE_SECURE ?? "").trim()
   ? process.env.COOKIE_SECURE === "true"
   : publicOrigin.startsWith("https://");
+
+if (!isPathInsideRoots(defaultCwd, normalizedRoots)) {
+  throw new Error("DEFAULT_CWD must be inside one of WORKSPACE_ROOTS.");
+}
 
 export const aiEnvKeys = [
   "OPENAI_API_KEY",
@@ -85,13 +128,17 @@ export const aiEnvKeys = [
 ] as const;
 
 export const config = {
+  nodeEnv,
+  isProduction,
   host,
   port,
   publicOrigin,
+  publicOriginUrl,
   dataDir: resolveMaybeRelative(process.env.DATA_DIR || ".codexinphone"),
   authMode,
   sessionSecret: buildSecret(),
   cookieSecure,
+  trustProxy: boolFromEnv("TRUST_PROXY", false),
   github: {
     clientId: process.env.GITHUB_CLIENT_ID?.trim() || "",
     clientSecret: process.env.GITHUB_CLIENT_SECRET?.trim() || "",
@@ -107,8 +154,58 @@ export const config = {
     args: parseArgs(process.env.CODEX_ARGS),
     workspaceRoots: normalizedRoots,
     defaultCwd
+  },
+  security: {
+    apiRateLimitWindowMs: intFromEnv("API_RATE_LIMIT_WINDOW_MS", 60_000),
+    apiRateLimitMax: intFromEnv("API_RATE_LIMIT_MAX", 240),
+    authRateLimitWindowMs: intFromEnv("AUTH_RATE_LIMIT_WINDOW_MS", 60_000),
+    authRateLimitMax: intFromEnv("AUTH_RATE_LIMIT_MAX", 12),
+    wsMaxMessageBytes: intFromEnv("WS_MAX_MESSAGE_BYTES", 64 * 1024),
+    wsMaxMessagesPerWindow: intFromEnv("WS_MAX_MESSAGES_PER_WINDOW", 240),
+    wsRateLimitWindowMs: intFromEnv("WS_RATE_LIMIT_WINDOW_MS", 60_000)
   }
 } as const;
+
+export function productionConfigIssues(): string[] {
+  const issues: string[] = [];
+  const localOrigins = new Set(["localhost", "127.0.0.1", "::1"]);
+
+  if (config.authMode === "dev") {
+    issues.push("AUTH_MODE=dev is not allowed for production use.");
+  }
+  if (!config.cookieSecure && !localOrigins.has(config.publicOriginUrl.hostname)) {
+    issues.push("COOKIE_SECURE must be true when PUBLIC_ORIGIN is not localhost.");
+  }
+  if (config.publicOriginUrl.protocol !== "https:" && !localOrigins.has(config.publicOriginUrl.hostname)) {
+    issues.push("PUBLIC_ORIGIN must use https outside localhost.");
+  }
+  if (config.authMode === "github") {
+    if (!config.github.clientId || !config.github.clientSecret) {
+      issues.push("GitHub OAuth requires GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.");
+    }
+    if (config.github.allowedEmails.length === 0 && config.github.allowedLogins.length === 0) {
+      issues.push("GitHub OAuth requires ALLOWED_EMAILS or ALLOWED_GITHUB_LOGINS.");
+    }
+    if (!config.github.callbackUrl.startsWith(`${config.publicOrigin.replace(/\/$/, "")}/`)) {
+      issues.push("GITHUB_CALLBACK_URL should be under PUBLIC_ORIGIN.");
+    }
+  }
+  if (config.authMode === "token" && config.pairingToken.length < 32) {
+    issues.push("PAIRING_TOKEN must be at least 32 characters in token auth mode.");
+  }
+  if (config.host === "0.0.0.0" || config.host === "::") {
+    issues.push("HOST should stay on 127.0.0.1 behind Tailscale or Cloudflare Tunnel.");
+  }
+
+  return issues;
+}
+
+if (isProduction) {
+  const issues = productionConfigIssues();
+  if (issues.length > 0) {
+    throw new Error(`Production configuration is not safe:\n- ${issues.join("\n- ")}`);
+  }
+}
 
 export function publicConfig(): PublicConfig {
   return {

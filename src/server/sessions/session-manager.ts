@@ -29,14 +29,15 @@ type PendingApproval = {
 };
 
 export type SessionManagerEvents = {
-  onChunk: (sessionId: string, chunk: TerminalChunk) => void;
-  onSessionUpdated: (summary: SessionSummary) => void;
-  onApprovalRequired: (request: ApprovalRequest) => void;
-  onApprovalResolved: (approvalId: string, approved: boolean) => void;
+  onChunk: (sessionId: string, chunk: TerminalChunk, ownerUserId: string) => void;
+  onSessionUpdated: (summary: SessionSummary, ownerUserId: string) => void;
+  onApprovalRequired: (request: ApprovalRequest, ownerUserId: string) => void;
+  onApprovalResolved: (approvalId: string, approved: boolean, ownerUserId: string) => void;
 };
 
 type ManagedSession = {
   id: string;
+  ownerUserId: string;
   cwd: string;
   command: string;
   args: string[];
@@ -59,17 +60,19 @@ export class SessionManager {
     return () => this.listeners.delete(listener);
   }
 
-  list(): SessionSummary[] {
-    return [...this.sessions.values()].map((session) => this.summary(session));
+  list(ownerUserId?: string): SessionSummary[] {
+    return [...this.sessions.values()]
+      .filter((session) => !ownerUserId || session.ownerUserId === ownerUserId)
+      .map((session) => this.summary(session));
   }
 
-  getHistory(sessionId: string): TerminalChunk[] {
-    const session = this.requireSession(sessionId);
+  getHistory(sessionId: string, ownerUserId: string): TerminalChunk[] {
+    const session = this.requireSession(sessionId, ownerUserId);
     return [...session.history];
   }
 
-  getSummary(sessionId: string): SessionSummary {
-    return this.summary(this.requireSession(sessionId));
+  getSummary(sessionId: string, ownerUserId: string): SessionSummary {
+    return this.summary(this.requireSession(sessionId, ownerUserId));
   }
 
   async create(options: CreateSessionOptions): Promise<SessionSummary> {
@@ -84,6 +87,7 @@ export class SessionManager {
     const args = options.args?.length ? options.args : [...config.codex.args];
     const session: ManagedSession = {
       id,
+      ownerUserId: options.user.id,
       cwd,
       command: config.codex.command,
       args,
@@ -137,7 +141,7 @@ export class SessionManager {
         session.history.push(chunk);
         session.updatedAt = chunk.at;
         void appendSessionEvent(id, { type: "terminal:chunk", ...chunk });
-        this.listeners.forEach((listener) => listener.onChunk(id, chunk));
+        this.listeners.forEach((listener) => listener.onChunk(id, chunk, session.ownerUserId));
       });
 
       session.terminal.on("exit", (exitCode) => {
@@ -162,15 +166,15 @@ export class SessionManager {
       };
       session.history.push(chunk);
       await appendSessionEvent(id, { type: "session:failed", at: session.updatedAt, message });
-      this.listeners.forEach((listener) => listener.onChunk(id, chunk));
+      this.listeners.forEach((listener) => listener.onChunk(id, chunk, session.ownerUserId));
       this.emitSessionUpdated(session);
     }
 
     return this.summary(session);
   }
 
-  appendInput(sessionId: string, data: string): void {
-    const session = this.requireSession(sessionId);
+  appendInput(sessionId: string, data: string, ownerUserId: string): void {
+    const session = this.requireSession(sessionId, ownerUserId);
     if (session.status !== "running" || !session.terminal) {
       throw new Error("Session is not running.");
     }
@@ -180,7 +184,7 @@ export class SessionManager {
       const approvalId = nanoid(10);
       const request = toApprovalRequest(approvalId, sessionId, decision);
       session.pendingApprovals.set(approvalId, { request, data });
-      this.listeners.forEach((listener) => listener.onApprovalRequired(request));
+      this.listeners.forEach((listener) => listener.onApprovalRequired(request, session.ownerUserId));
       void appendSessionEvent(sessionId, {
         type: "approval:required",
         at: request.createdAt,
@@ -194,8 +198,11 @@ export class SessionManager {
     session.terminal.write(data);
   }
 
-  approve(approvalId: string, approved: boolean): void {
+  approve(approvalId: string, approved: boolean, ownerUserId: string): void {
     for (const session of this.sessions.values()) {
+      if (session.ownerUserId !== ownerUserId) {
+        continue;
+      }
       const pending = session.pendingApprovals.get(approvalId);
       if (!pending) {
         continue;
@@ -211,22 +218,24 @@ export class SessionManager {
         approvalId,
         approved
       });
-      this.listeners.forEach((listener) => listener.onApprovalResolved(approvalId, approved));
+      this.listeners.forEach((listener) =>
+        listener.onApprovalResolved(approvalId, approved, session.ownerUserId)
+      );
       return;
     }
 
     throw new Error("Approval request not found.");
   }
 
-  resize(sessionId: string, cols: number, rows: number): void {
-    const session = this.requireSession(sessionId);
+  resize(sessionId: string, cols: number, rows: number, ownerUserId: string): void {
+    const session = this.requireSession(sessionId, ownerUserId);
     if (session.terminal && session.status === "running") {
       session.terminal.resize(Math.max(20, cols), Math.max(8, rows));
     }
   }
 
-  terminate(sessionId: string): void {
-    const session = this.requireSession(sessionId);
+  terminate(sessionId: string, ownerUserId: string): void {
+    const session = this.requireSession(sessionId, ownerUserId);
     if (session.terminal && session.status === "running") {
       session.status = "terminated";
       session.terminal.kill();
@@ -235,9 +244,12 @@ export class SessionManager {
     }
   }
 
-  private requireSession(sessionId: string): ManagedSession {
+  private requireSession(sessionId: string, ownerUserId?: string): ManagedSession {
     const session = this.sessions.get(sessionId);
     if (!session) {
+      throw new Error("Session not found.");
+    }
+    if (ownerUserId && session.ownerUserId !== ownerUserId) {
       throw new Error("Session not found.");
     }
     return session;
@@ -258,7 +270,7 @@ export class SessionManager {
 
   private emitSessionUpdated(session: ManagedSession): void {
     const summary = this.summary(session);
-    this.listeners.forEach((listener) => listener.onSessionUpdated(summary));
+    this.listeners.forEach((listener) => listener.onSessionUpdated(summary, session.ownerUserId));
   }
 }
 

@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Audit
+        run: npm run audit
+
+      - name: Browser verification
+        shell: bash
+        run: |
+          AUTH_MODE=dev \
+          CODEX_COMMAND=node \
+          CODEX_ARGS=scripts/mock-codex.js \
+          DEFAULT_CWD="$GITHUB_WORKSPACE" \
+          WORKSPACE_ROOTS="$GITHUB_WORKSPACE" \
+          npm run start &
+          SERVER_PID=$!
+          trap "kill $SERVER_PID" EXIT
+          sleep 3
+          npm run verify:browser
