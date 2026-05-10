@@ -76,6 +76,20 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-away-quick-tunnel.ps1
 
 스크립트가 휴대폰 URL과 pairing token을 출력합니다. 이 방식은 임시 공개 URL을 사용하므로 장기 운영은 GitHub OAuth + Cloudflare Access 또는 Tailscale을 쓰세요.
 
+Cloudflare quick tunnel이 일시적으로 실패하면 계정 없이 `localtunnel` 대체 경로를 시도할 수 있습니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-away-localhostrun.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\start-away-localtunnel.ps1
+```
+
+먼저 `localhost.run`을 권장합니다. `localtunnel`이 중간 확인 화면에서 tunnel password를 물어보면 노트북의 공인 IP 주소를 입력합니다.
+스크립트가 공인 IP를 출력하지 못했다면 다음 명령으로 확인할 수 있습니다.
+
+```powershell
+Invoke-RestMethod -Uri "https://api.ipify.org?format=text"
+```
+
 ## 4. 휴대폰에서 사용
 
 휴대폰 브라우저에서 `PUBLIC_ORIGIN` 주소를 열고 GitHub OAuth로 로그인합니다.

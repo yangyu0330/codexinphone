@@ -7,8 +7,8 @@ $ErrorActionPreference = "Stop"
 $ProjectPath = (Resolve-Path -LiteralPath $ProjectPath).Path
 Set-Location -LiteralPath $ProjectPath
 
-if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue)) {
-    throw "cloudflared is not installed. Run: powershell -ExecutionPolicy Bypass -File .\scripts\install-remote-access.ps1 -Provider cloudflared"
+if (-not (Get-Command ssh -ErrorAction SilentlyContinue)) {
+    throw "OpenSSH client is not installed. Install Windows OpenSSH Client first."
 }
 
 function New-Secret([int]$Bytes = 32) {
@@ -69,19 +69,27 @@ function Enable-KeepAwake {
 using System;
 using System.Runtime.InteropServices;
 
-public static class CodexInPhoneQuickTunnelPower {
+public static class CodexInPhoneLocalhostRunPower {
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern uint SetThreadExecutionState(uint esFlags);
 }
 "@
     $flags = [uint32](2147483648 -bor 1 -bor 64)
-    [void][CodexInPhoneQuickTunnelPower]::SetThreadExecutionState($flags)
+    [void][CodexInPhoneLocalhostRunPower]::SetThreadExecutionState($flags)
 }
 
 function Disable-KeepAwake {
-    if ("CodexInPhoneQuickTunnelPower" -as [type]) {
-        [void][CodexInPhoneQuickTunnelPower]::SetThreadExecutionState([uint32]2147483648)
+    if ("CodexInPhoneLocalhostRunPower" -as [type]) {
+        [void][CodexInPhoneLocalhostRunPower]::SetThreadExecutionState([uint32]2147483648)
     }
+}
+
+function Stop-ProcessTree([int]$ProcessId) {
+    $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue)
+    foreach ($child in $children) {
+        Stop-ProcessTree -ProcessId $child.ProcessId
+    }
+    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
 }
 
 $envPath = Join-Path $ProjectPath ".env"
@@ -105,46 +113,62 @@ if (-not $NoBuild) {
 
 $logDir = Join-Path $ProjectPath "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-$tunnelLog = Join-Path $logDir "cloudflared-quick-tunnel.log"
+$tunnelOut = Join-Path $logDir "localhostrun.out.log"
+$tunnelErr = Join-Path $logDir "localhostrun.err.log"
 $serverOut = Join-Path $logDir "away-server.out.log"
 $serverErr = Join-Path $logDir "away-server.err.log"
-Remove-Item -LiteralPath $tunnelLog,$serverOut,$serverErr -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $tunnelOut,$tunnelErr,$serverOut,$serverErr -ErrorAction SilentlyContinue
 
+$sshTunnel = $null
 $publicOrigin = $null
-$cloudflared = $null
 for ($attempt = 1; $attempt -le 3 -and -not $publicOrigin; $attempt++) {
-    Remove-Item -LiteralPath $tunnelLog -ErrorAction SilentlyContinue
-    Write-Host "Starting Cloudflare quick tunnel (attempt $attempt/3)..."
-    $cloudflared = Start-Process -FilePath "cloudflared.exe" `
-        -ArgumentList @("tunnel", "--url", "http://127.0.0.1:8787", "--no-autoupdate", "--logfile", $tunnelLog) `
+    Remove-Item -LiteralPath $tunnelOut,$tunnelErr -ErrorAction SilentlyContinue
+    Write-Host "Starting localhost.run SSH tunnel (attempt $attempt/3)..."
+    $sshTunnel = Start-Process -FilePath "ssh.exe" `
+        -ArgumentList @(
+            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", "ExitOnForwardFailure=yes",
+            "-o", "ServerAliveInterval=30",
+            "-o", "ServerAliveCountMax=3",
+            "-R", "80:127.0.0.1:8787",
+            "nokey@localhost.run"
+        ) `
         -WorkingDirectory $ProjectPath `
         -WindowStyle Hidden `
+        -RedirectStandardOutput $tunnelOut `
+        -RedirectStandardError $tunnelErr `
         -PassThru
 
     for ($i = 0; $i -lt 60; $i++) {
         Start-Sleep -Seconds 1
-        if (Test-Path -LiteralPath $tunnelLog) {
-            $raw = Get-Content -LiteralPath $tunnelLog -Raw -ErrorAction SilentlyContinue
-            $match = [regex]::Match($raw, "https://[a-zA-Z0-9-]+\.trycloudflare\.com")
-            if ($match.Success) {
-                $publicOrigin = $match.Value
-                break
-            }
+        $raw = ""
+        if (Test-Path -LiteralPath $tunnelOut) {
+            $raw += Get-Content -LiteralPath $tunnelOut -Raw -ErrorAction SilentlyContinue
         }
-        if ($cloudflared.HasExited) {
+        if (Test-Path -LiteralPath $tunnelErr) {
+            $raw += "`n" + (Get-Content -LiteralPath $tunnelErr -Raw -ErrorAction SilentlyContinue)
+        }
+        $match = [regex]::Match($raw, "https://[a-zA-Z0-9.-]+\.lhr\.life")
+        if ($match.Success) {
+            $publicOrigin = $match.Value
+            break
+        }
+        if ($sshTunnel.HasExited) {
             break
         }
     }
 
     if (-not $publicOrigin) {
-        Stop-Process -Id $cloudflared.Id -Force -ErrorAction SilentlyContinue
+        Stop-ProcessTree -ProcessId $sshTunnel.Id
         Start-Sleep -Seconds 2
     }
 }
 
 if (-not $publicOrigin) {
-    throw "Could not create a Cloudflare quick tunnel after 3 attempts. Check $tunnelLog"
+    throw "Could not create a localhost.run tunnel after 3 attempts. Check $tunnelErr and $tunnelOut"
 }
+
+Set-Content -LiteralPath (Join-Path $logDir "away-localhostrun-url.txt") -Value $publicOrigin -NoNewline
 
 Set-DotEnvValue $envPath "NODE_ENV" "production"
 Set-DotEnvValue $envPath "AUTH_MODE" "token"
@@ -181,7 +205,7 @@ try {
     }
 
     Write-Host ""
-    Write-Host "Away quick tunnel is running."
+    Write-Host "Away localhost.run tunnel is running."
     Write-Host "Phone URL:"
     Write-Host $publicOrigin
     Write-Host ""
@@ -192,18 +216,18 @@ try {
     Write-Host "Press Ctrl+C to stop the tunnel and server."
     Write-Host ""
 
-    while (-not $server.HasExited -and -not $cloudflared.HasExited) {
+    while (-not $server.HasExited -and -not $sshTunnel.HasExited) {
         Start-Sleep -Seconds 5
     }
 
     if ($server.HasExited) {
         throw "Codex in Phone server stopped. Check $serverErr"
     }
-    if ($cloudflared.HasExited) {
-        throw "cloudflared tunnel stopped. Check $tunnelLog"
+    if ($sshTunnel.HasExited) {
+        throw "localhost.run SSH tunnel stopped. Check $tunnelErr and $tunnelOut"
     }
 } finally {
     Disable-KeepAwake
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
-    Stop-Process -Id $cloudflared.Id -Force -ErrorAction SilentlyContinue
+    Stop-ProcessTree -ProcessId $sshTunnel.Id
 }
