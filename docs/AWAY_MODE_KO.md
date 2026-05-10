@@ -11,6 +11,20 @@
 
 공유기 포트포워딩으로 `8787` 포트를 직접 열지 마세요.
 
+설치 도우미:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-remote-access.ps1 -Provider tailscale
+```
+
+또는:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-remote-access.ps1 -Provider cloudflared
+```
+
+설치 과정은 Windows 보안/UAC 확인이 필요할 수 있으므로 사용자가 직접 완료해야 합니다.
+
 ## 2. `.env` 채우기
 
 ```powershell

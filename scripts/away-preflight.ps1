@@ -52,6 +52,10 @@ function Require-Value($envMap, [string]$Name) {
         Add-Failure "$Name is missing in .env"
         return $false
     }
+    if ($envMap[$Name] -match "your-|example\.com|paste-|change-this") {
+        Add-Failure "$Name still contains a placeholder value."
+        return $false
+    }
     Add-Ok "$Name is present"
     return $true
 }
@@ -97,8 +101,16 @@ if ($envMap.Count -gt 0) {
         Require-Value $envMap "GITHUB_CLIENT_SECRET" | Out-Null
         Require-Value $envMap "GITHUB_CALLBACK_URL" | Out-Null
         if (
-            (-not $envMap.ContainsKey("ALLOWED_EMAILS") -or [string]::IsNullOrWhiteSpace($envMap["ALLOWED_EMAILS"])) -and
-            (-not $envMap.ContainsKey("ALLOWED_GITHUB_LOGINS") -or [string]::IsNullOrWhiteSpace($envMap["ALLOWED_GITHUB_LOGINS"]))
+            (
+                (-not $envMap.ContainsKey("ALLOWED_EMAILS")) -or
+                [string]::IsNullOrWhiteSpace($envMap["ALLOWED_EMAILS"]) -or
+                $envMap["ALLOWED_EMAILS"] -match "your-|example\.com"
+            ) -and
+            (
+                (-not $envMap.ContainsKey("ALLOWED_GITHUB_LOGINS")) -or
+                [string]::IsNullOrWhiteSpace($envMap["ALLOWED_GITHUB_LOGINS"]) -or
+                $envMap["ALLOWED_GITHUB_LOGINS"] -match "your-"
+            )
         ) {
             Add-Failure "Set ALLOWED_EMAILS or ALLOWED_GITHUB_LOGINS for GitHub OAuth."
         } else {
