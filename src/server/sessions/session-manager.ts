@@ -74,6 +74,7 @@ export class SessionManager {
   list(ownerUserId?: string): SessionSummary[] {
     return [...this.sessions.values()]
       .filter((session) => !ownerUserId || session.ownerUserId === ownerUserId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .map((session) => this.summary(session));
   }
 
