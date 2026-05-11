@@ -18,7 +18,6 @@ require_env() {
 
 require_env "SESSION_SECRET"
 require_env "PAIRING_TOKEN"
-require_env "OPENAI_API_KEY"
 
 if (( ${#SESSION_SECRET} < 32 )); then
   fail "SESSION_SECRET must be at least 32 characters."
@@ -56,6 +55,11 @@ echo "Codex in Phone"
 echo "  URL: ${PUBLIC_ORIGIN}"
 echo "  Auth: ${AUTH_MODE}"
 echo "  Workspace: ${DEFAULT_CWD}"
+if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+  echo "  OpenAI API key: not set; run 'codex login --device-auth' in this Codespace if Codex asks you to log in."
+else
+  echo "  OpenAI API key: set"
+fi
 echo
 
 npm run build

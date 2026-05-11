@@ -15,11 +15,17 @@
 2. GitHub Settings > Codespaces > Secrets에 아래 값을 추가하고 이 저장소에 접근을 허용합니다.
    - `SESSION_SECRET`: 32자 이상 랜덤 문자열
    - `PAIRING_TOKEN`: 32자 이상 랜덤 문자열, 휴대폰 로그인에 사용
-   - `OPENAI_API_KEY`: Codex CLI가 사용할 OpenAI API key
+   - `OPENAI_API_KEY`: 선택 사항입니다. API key가 없으면 Codespace 터미널에서 `codex login --device-auth`로 로그인합니다.
 3. Codespace 터미널에서 아래 명령을 실행합니다.
 
 ```bash
 npm run codespaces:start
+```
+
+Codex가 로그인하라고 하면 새 터미널에서 아래 명령을 실행하고 브라우저 인증을 완료합니다.
+
+```bash
+codex login --device-auth
 ```
 
 4. Ports 탭에서 `Codex in Phone` 또는 `8787` 포트의 forwarded address를 엽니다.
@@ -50,6 +56,7 @@ npm run codespaces:start
 ## 문제 해결
 
 - `Missing required environment variable`이 나오면 GitHub Codespaces secret이 저장소에 연결되어 있는지 확인합니다.
+- `SESSION_SECRET`과 `PAIRING_TOKEN`은 필수이고, `OPENAI_API_KEY`는 선택 사항입니다.
 - 접속 주소는 `https://<codespace-name>-8787.<domain>` 형식이어야 합니다.
 - 휴대폰에서 연결이 안 되면 Codespaces Ports 탭에서 포트 visibility가 Private인지 확인하고 GitHub 로그인을 다시 합니다.
 - `CODEX_COMMAND does not resolve`가 나오면 Codespace를 rebuild 하거나 `npm install -g @openai/codex`를 실행합니다.
