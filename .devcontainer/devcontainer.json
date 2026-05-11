@@ -11,7 +11,7 @@
     "8787": {
       "label": "Codex in Phone",
       "onAutoForward": "notify",
-      "visibility": "private"
+      "visibility": "public"
     }
   },
   "postCreateCommand": "npm ci && npm install -g @openai/codex",

@@ -10,7 +10,7 @@ https://yangyu0330.github.io/codexinphone/
 
 ## 자동 갱신 조건
 
-기본 흐름은 GitHub 토큰이 없어도 동작합니다. Codespace 이름이 유지되는 동안 런처가 열릴 때마다 고정 Codespaces 주소에서 최신 터널 주소를 다시 읽습니다.
+기본 흐름은 GitHub 토큰이 없어도 동작합니다. Codespace 이름이 유지되는 동안 런처가 열릴 때마다 public으로 열린 고정 Codespaces 주소에서 최신 터널 주소를 다시 읽습니다.
 
 추가로, Codespace 안에서 `scripts/start-codespaces-localhostrun.sh`가 새 localhost.run 주소를 찾으면 `scripts/publish-current-url.sh`가 `docs/current-url.json`을 GitHub에 커밋할 수 있습니다.
 
@@ -31,3 +31,9 @@ https://yangyu0330.github.io/codexinphone/
 3. 다음부터는 설치된 런처를 열면 현재 살아 있는 Codex in Phone 주소로 이동합니다.
 
 Codespace를 완전히 끄면 실제 앱 서버도 꺼지므로 런처가 이동할 수 있는 최신 주소가 있어도 접속은 되지 않습니다. 다시 쓰려면 GitHub Codespaces에서 Codespace를 켜야 합니다.
+
+Codespace를 새로 만들었거나 포트가 private으로 돌아가면 다음 명령으로 다시 열 수 있습니다.
+
+```bash
+gh codespace ports visibility 8787:public -c codexinphone-live-jjg6pxpq6wq43q4pv
+```
