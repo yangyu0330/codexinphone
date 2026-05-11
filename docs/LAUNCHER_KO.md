@@ -41,6 +41,8 @@ https://yangyu0330.github.io/codexinphone/
 
 토큰은 GitHub Pages 서버에 저장되지 않고, 현재 휴대폰 브라우저의 localStorage에만 저장됩니다.
 
+`토큰 설정`을 누르면 런처의 자동 이동이 멈춥니다. 토큰을 붙여 넣고 저장한 뒤 `Codespace 켜기`를 누르면 됩니다.
+
 Codespace를 완전히 끄면 실제 앱 서버도 꺼지므로 런처가 이동할 수 있는 최신 주소가 있어도 접속은 되지 않습니다. 다시 쓰려면 GitHub Codespaces에서 Codespace를 켜야 합니다.
 
 Codespace를 새로 만들었거나 포트가 private으로 돌아가면 다음 명령으로 다시 열 수 있습니다.

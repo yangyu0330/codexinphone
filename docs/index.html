@@ -210,8 +210,15 @@
             id="token-input"
             type="password"
             autocomplete="off"
-            placeholder="GitHub token"
+            placeholder="GitHub token with codespace scope"
           />
+          <a
+            class="button"
+            href="https://github.com/settings/tokens/new?description=Codex%20in%20Phone%20launcher&scopes=codespace"
+            target="_blank"
+            rel="noreferrer"
+            >토큰 만들기</a
+          >
           <div class="actions">
             <button class="primary" type="submit">저장</button>
             <button id="clear-token-button" type="button">삭제</button>
@@ -229,6 +236,7 @@
       const GITHUB_TOKEN_KEY = "codexinphone.githubCodespacesToken";
       const GITHUB_API_VERSION = "2026-03-10";
       const REDIRECT_DELAY_MS = 700;
+      const FIRST_SETUP_REDIRECT_DELAY_MS = 10000;
 
       const stateLabel = document.querySelector("#state-label");
       const message = document.querySelector("#message");
@@ -310,8 +318,9 @@
 
       function renderReady(data, source) {
         clearTimeout(redirectTimer);
+        const hasToken = Boolean(getGithubToken());
         stateLabel.textContent = source === "cache" ? "저장된 주소" : "최신 주소";
-        message.textContent = "앱을 여는 중";
+        message.textContent = hasToken ? "앱을 여는 중" : "10초 뒤 앱을 엽니다";
         currentUrl.textContent = data.url;
         setOpenLink(data.url);
         launcherState = data;
@@ -329,7 +338,7 @@
           updatedAt.textContent = `업데이트: ${formatted}`;
         }
 
-        const delayMs = getGithubToken() ? REDIRECT_DELAY_MS : 3000;
+        const delayMs = hasToken ? REDIRECT_DELAY_MS : FIRST_SETUP_REDIRECT_DELAY_MS;
         redirectTimer = window.setTimeout(() => {
           window.location.replace(data.url);
         }, delayMs);
@@ -541,6 +550,8 @@
       retryButton.addEventListener("click", loadLatest);
       startCodespaceButton.addEventListener("click", startCodespace);
       tokenToggleButton.addEventListener("click", () => {
+        clearTimeout(redirectTimer);
+        message.textContent = "자동 이동을 멈췄습니다";
         tokenForm.hidden = !tokenForm.hidden;
         if (!tokenForm.hidden) {
           tokenInput.value = getGithubToken();

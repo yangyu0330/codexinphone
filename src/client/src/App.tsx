@@ -37,6 +37,18 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
+const terminalKeys = [
+  { label: "Enter", data: "\r" },
+  { label: "Tab", data: "\t" },
+  { label: "Ctrl+C", data: "\x03" },
+  { label: "Ctrl+D", data: "\x04" },
+  { label: "Esc", data: "\x1b" },
+  { label: "↑", data: "\x1b[A" },
+  { label: "↓", data: "\x1b[B" },
+  { label: "←", data: "\x1b[D" },
+  { label: "→", data: "\x1b[C" }
+] as const;
+
 function launcherRedirectUrl(publicOrigin: string): string | undefined {
   try {
     const target = new URL(publicOrigin);
@@ -134,6 +146,15 @@ export function App() {
           break;
         case "session:list":
           setSessions(message.sessions);
+          if (!activeSessionIdRef.current && message.sessions.length > 0) {
+            const resumable =
+              message.sessions.find(
+                (session) => session.status === "running" || session.status === "starting"
+              ) ?? message.sessions[0];
+            activeSessionIdRef.current = resumable.id;
+            setActiveSessionId(resumable.id);
+            socket.send(JSON.stringify({ type: "session:attach", sessionId: resumable.id }));
+          }
           break;
         case "session:created":
           setSessions((previous) => upsertSession(previous, message.session));
@@ -261,11 +282,19 @@ export function App() {
   }
 
   function sendMobileInput() {
-    if (!activeSessionId || !mobileInput.trim()) {
+    if (!activeSessionId) {
       return;
     }
     send({ type: "stdin:append", sessionId: activeSessionId, data: `${mobileInput}\r` });
     setMobileInput("");
+    terminalRef.current?.focus();
+  }
+
+  function sendTerminalKey(data: string) {
+    if (!activeSessionId) {
+      return;
+    }
+    send({ type: "stdin:append", sessionId: activeSessionId, data });
     terminalRef.current?.focus();
   }
 
@@ -613,6 +642,20 @@ export function App() {
               onResize={resize}
               disabled={!activeSessionId || !connected}
             />
+          </div>
+
+          <div className="terminalKeys" aria-label="Terminal shortcut keys">
+            {terminalKeys.map((key) => (
+              <button
+                key={key.label}
+                className="keyButton"
+                type="button"
+                onClick={() => sendTerminalKey(key.data)}
+                disabled={!activeSessionId || !connected}
+              >
+                {key.label}
+              </button>
+            ))}
           </div>
 
           <form

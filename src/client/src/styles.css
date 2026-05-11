@@ -374,7 +374,7 @@ input:focus {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto 1fr auto auto auto;
   gap: 10px;
   padding: 12px;
 }
@@ -440,6 +440,20 @@ input:focus {
   gap: 8px;
 }
 
+.terminalKeys {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(44px, 1fr));
+  gap: 6px;
+}
+
+.keyButton {
+  min-height: 38px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #f8fafc;
+  background: #21262d;
+}
+
 .errorText {
   color: #ff7b72;
   overflow-wrap: anywhere;
@@ -488,6 +502,10 @@ input:focus {
     min-height: 300px;
   }
 
+  .terminalKeys {
+    grid-template-columns: repeat(5, minmax(48px, 1fr));
+  }
+
   .approvalBanner {
     align-items: stretch;
     flex-wrap: wrap;
@@ -510,5 +528,9 @@ input:focus {
 
   .loginPanel {
     padding: 18px;
+  }
+
+  .terminalKeys {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
