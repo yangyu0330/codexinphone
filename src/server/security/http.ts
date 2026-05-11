@@ -9,6 +9,8 @@ import { logger } from "../logger.js";
 
 const stateChangingMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+const launcherCorsPaths = new Set(["/api/config", "/health"]);
+const launcherCorsMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 
 function isCodespacesTunnelOrigin(origin: URL): boolean {
   return (
@@ -93,6 +95,46 @@ export function isAllowedOrigin(origin: string | undefined): boolean {
     localHosts.has(parsed.hostname) &&
     parsed.protocol === config.publicOriginUrl.protocol
   );
+}
+
+export function isLauncherOrigin(origin: string | undefined): boolean {
+  if (!origin) {
+    return false;
+  }
+
+  try {
+    return config.launcher.origins.includes(new URL(origin).origin);
+  } catch {
+    return false;
+  }
+}
+
+export function launcherReadCors(req: Request, res: Response, next: NextFunction): void {
+  const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+
+  if (
+    !origin ||
+    !launcherCorsPaths.has(req.path) ||
+    !launcherCorsMethods.has(req.method) ||
+    !isLauncherOrigin(origin)
+  ) {
+    next();
+    return;
+  }
+
+  const allowedOrigin = new URL(origin).origin;
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Max-Age", "600");
+  res.append("Vary", "Origin");
+
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+
+  next();
 }
 
 export function sameOriginOnly(req: Request, res: Response, next: NextFunction): void {

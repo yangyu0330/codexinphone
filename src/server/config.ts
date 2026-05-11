@@ -18,6 +18,11 @@ function splitList(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
+function parseOrigins(value: string | undefined, fallback: string[]): string[] {
+  const origins = splitList(value);
+  return (origins.length ? origins : fallback).map((origin) => new URL(origin).origin);
+}
+
 function parseArgs(value: string | undefined): string[] {
   if (!value?.trim()) {
     return [];
@@ -133,6 +138,7 @@ const codespacePortDomain = process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN
 const codespaceFixedUrl = codespaceName
   ? `https://${codespaceName}-${port}.${codespacePortDomain}`
   : "";
+const launcherOrigins = parseOrigins(process.env.LAUNCHER_ORIGINS, ["https://yangyu0330.github.io"]);
 
 if (!isPathInsideRoots(defaultCwd, normalizedRoots)) {
   throw new Error("DEFAULT_CWD must be inside one of WORKSPACE_ROOTS.");
@@ -189,6 +195,9 @@ export const config = {
     manageUrl: codespaceName
       ? `https://github.com/codespaces/${encodeURIComponent(codespaceName)}`
       : "https://github.com/codespaces"
+  },
+  launcher: {
+    origins: launcherOrigins
   },
   security: {
     apiRateLimitWindowMs: intFromEnv("API_RATE_LIMIT_WINDOW_MS", 60_000),

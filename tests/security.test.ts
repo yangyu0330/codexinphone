@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SessionStore } from "../src/server/auth/session-store.js";
 import { isPathInsideRoots } from "../src/server/path-policy.js";
-import { isAllowedOrigin } from "../src/server/security/http.js";
+import { isAllowedOrigin, isLauncherOrigin } from "../src/server/security/http.js";
 import { maskSecrets } from "../src/server/security/masking.js";
 import { inspectTerminalInput } from "../src/server/security/policy.js";
 import { parseClientMessage } from "../src/server/ws-validation.js";
@@ -65,6 +65,16 @@ describe("SessionStore", () => {
 describe("isAllowedOrigin", () => {
   it("rejects unexpected origins", () => {
     expect(isAllowedOrigin("https://attacker.example")).toBe(false);
+  });
+});
+
+describe("isLauncherOrigin", () => {
+  it("allows the GitHub Pages launcher origin", () => {
+    expect(isLauncherOrigin("https://yangyu0330.github.io")).toBe(true);
+  });
+
+  it("rejects unexpected launcher origins", () => {
+    expect(isLauncherOrigin("https://attacker.example")).toBe(false);
   });
 });
 

@@ -11,6 +11,7 @@ import { stopCurrentCodespace } from "./codespace-control.js";
 import {
   apiRateLimiter,
   authRateLimiter,
+  launcherReadCors,
   requestLogger,
   sameOriginOnly,
   securityHeaders
@@ -24,6 +25,7 @@ app.disable("x-powered-by");
 app.set("trust proxy", config.trustProxy);
 app.use(requestLogger());
 app.use(securityHeaders());
+app.use(launcherReadCors);
 app.use(sameOriginOnly);
 app.use(express.json({ limit: "256kb" }));
 

@@ -199,6 +199,22 @@
         }
       }
 
+      function isSafeFixedUrl(value) {
+        try {
+          const url = new URL(value);
+          return (
+            url.protocol === "https:" &&
+            /^[a-z0-9-]+-\d+\.app\.github\.dev$/i.test(url.hostname)
+          );
+        } catch {
+          return false;
+        }
+      }
+
+      function trimSlash(value) {
+        return value.replace(/\/$/, "");
+      }
+
       function setOpenLink(url) {
         openLink.href = url;
         openLink.removeAttribute("aria-disabled");
@@ -238,6 +254,53 @@
         }, REDIRECT_DELAY_MS);
       }
 
+      async function readLauncherState() {
+        const response = await fetch(`${JSON_PATH}?t=${Date.now()}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!data || !isSafeAppUrl(data.url)) {
+          throw new Error("Invalid launcher URL");
+        }
+        return data;
+      }
+
+      async function readLiveState(baseState) {
+        if (!baseState || !isSafeFixedUrl(baseState.fixedUrl)) {
+          return null;
+        }
+
+        try {
+          const response = await fetch(
+            `${trimSlash(baseState.fixedUrl)}/api/config?t=${Date.now()}`,
+            { cache: "no-store" },
+          );
+          if (!response.ok) {
+            return null;
+          }
+
+          const config = await response.json();
+          if (!isSafeAppUrl(config.publicOrigin)) {
+            return null;
+          }
+
+          return {
+            ...baseState,
+            url: config.publicOrigin,
+            updatedAt: new Date().toISOString(),
+            source: "codespaces-config",
+            fixedUrl: config.codespace?.fixedUrl || baseState.fixedUrl,
+            manageUrl: config.codespace?.manageUrl || baseState.manageUrl,
+          };
+        } catch {
+          return null;
+        }
+      }
+
       function parseCachedState() {
         try {
           const value = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
@@ -251,24 +314,19 @@
         renderError("최신 주소를 확인하는 중");
 
         try {
-          const response = await fetch(`${JSON_PATH}?t=${Date.now()}`, {
-            cache: "no-store",
-          });
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-
-          const data = await response.json();
-          if (!data || !isSafeAppUrl(data.url)) {
-            throw new Error("Invalid launcher URL");
-          }
+          const baseState = await readLauncherState();
+          const liveState = await readLiveState(baseState);
+          const data = liveState || baseState;
 
           localStorage.setItem(CACHE_KEY, JSON.stringify(data));
           renderReady(data, "network");
         } catch {
           const cached = parseCachedState();
           if (cached) {
-            renderReady(cached, "cache");
+            const liveState = await readLiveState(cached);
+            const data = liveState || cached;
+            localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+            renderReady(data, liveState ? "network" : "cache");
             return;
           }
 
