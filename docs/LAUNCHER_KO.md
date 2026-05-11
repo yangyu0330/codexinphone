@@ -30,6 +30,17 @@ https://yangyu0330.github.io/codexinphone/
 2. 홈 화면에 추가하거나 설치합니다.
 3. 다음부터는 설치된 런처를 열면 현재 살아 있는 Codex in Phone 주소로 이동합니다.
 
+## 폰에서 Codespace 켜기
+
+런처의 `Codespace 켜기` 버튼은 GitHub API를 직접 호출합니다. 처음 한 번 `토큰 설정`에서 GitHub token을 저장해야 합니다.
+
+필요 권한:
+
+- Personal access token classic: `codespace`
+- Fine-grained token: `Codespaces lifecycle admin` repository permission, write
+
+토큰은 GitHub Pages 서버에 저장되지 않고, 현재 휴대폰 브라우저의 localStorage에만 저장됩니다.
+
 Codespace를 완전히 끄면 실제 앱 서버도 꺼지므로 런처가 이동할 수 있는 최신 주소가 있어도 접속은 되지 않습니다. 다시 쓰려면 GitHub Codespaces에서 Codespace를 켜야 합니다.
 
 Codespace를 새로 만들었거나 포트가 private으로 돌아가면 다음 명령으로 다시 열 수 있습니다.

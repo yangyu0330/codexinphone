@@ -102,20 +102,37 @@
       }
 
       button,
-      a.button {
+      a.button,
+      input {
         min-height: 46px;
         border-radius: 8px;
         border: 1px solid rgba(237, 242, 244, 0.16);
+        font: inherit;
+      }
+
+      button,
+      a.button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         padding: 0 14px;
         color: #edf2f4;
         background: #223039;
-        font: inherit;
         font-weight: 680;
         text-decoration: none;
         cursor: pointer;
+      }
+
+      input {
+        width: 100%;
+        padding: 0 12px;
+        color: #edf2f4;
+        background: #121a1f;
+        outline: none;
+      }
+
+      input:focus {
+        border-color: #74b391;
       }
 
       button.primary,
@@ -128,6 +145,15 @@
       a[aria-disabled="true"] {
         opacity: 0.48;
         pointer-events: none;
+      }
+
+      .token-form {
+        display: grid;
+        gap: 10px;
+      }
+
+      .token-form[hidden] {
+        display: none;
       }
 
       .meta {
@@ -169,12 +195,39 @@
       <a class="button" id="manage-link" href="https://github.com/codespaces"
         >Codespaces</a
       >
+
+      <section class="status" aria-live="polite">
+        <p class="label">Codespace 전원</p>
+        <p class="message" id="codespace-message">상태 확인 대기</p>
+        <div class="actions">
+          <button class="primary" id="start-codespace-button" type="button">
+            Codespace 켜기
+          </button>
+          <button id="token-toggle-button" type="button">토큰 설정</button>
+        </div>
+        <form class="token-form" id="token-form" hidden>
+          <input
+            id="token-input"
+            type="password"
+            autocomplete="off"
+            placeholder="GitHub token"
+          />
+          <div class="actions">
+            <button class="primary" type="submit">저장</button>
+            <button id="clear-token-button" type="button">삭제</button>
+          </div>
+        </form>
+        <div class="meta" id="token-meta"></div>
+      </section>
+
       <div class="meta" id="updated-at"></div>
     </main>
 
     <script>
       const JSON_PATH = "./current-url.json";
       const CACHE_KEY = "codexinphone.latestLauncherState";
+      const GITHUB_TOKEN_KEY = "codexinphone.githubCodespacesToken";
+      const GITHUB_API_VERSION = "2026-03-10";
       const REDIRECT_DELAY_MS = 700;
 
       const stateLabel = document.querySelector("#state-label");
@@ -184,8 +237,16 @@
       const openLink = document.querySelector("#open-link");
       const retryButton = document.querySelector("#retry-button");
       const manageLink = document.querySelector("#manage-link");
+      const codespaceMessage = document.querySelector("#codespace-message");
+      const startCodespaceButton = document.querySelector("#start-codespace-button");
+      const tokenToggleButton = document.querySelector("#token-toggle-button");
+      const tokenForm = document.querySelector("#token-form");
+      const tokenInput = document.querySelector("#token-input");
+      const clearTokenButton = document.querySelector("#clear-token-button");
+      const tokenMeta = document.querySelector("#token-meta");
 
       let redirectTimer = 0;
+      let launcherState = null;
 
       function isSafeAppUrl(value) {
         try {
@@ -215,6 +276,23 @@
         return value.replace(/\/$/, "");
       }
 
+      function getGithubToken() {
+        return localStorage.getItem(GITHUB_TOKEN_KEY) || "";
+      }
+
+      function setCodespaceMessage(text) {
+        codespaceMessage.textContent = text;
+      }
+
+      function updateTokenUi() {
+        const hasToken = Boolean(getGithubToken());
+        tokenToggleButton.textContent = hasToken ? "토큰 변경" : "토큰 설정";
+        tokenMeta.textContent = hasToken
+          ? "GitHub token이 이 기기에 저장되어 있습니다"
+          : "처음 한 번 GitHub token을 저장하면 여기서 Codespace를 켤 수 있습니다";
+        startCodespaceButton.disabled = !launcherState?.codespaceName;
+      }
+
       function setOpenLink(url) {
         openLink.href = url;
         openLink.removeAttribute("aria-disabled");
@@ -236,6 +314,8 @@
         message.textContent = "앱을 여는 중";
         currentUrl.textContent = data.url;
         setOpenLink(data.url);
+        launcherState = data;
+        updateTokenUi();
 
         if (data.manageUrl) {
           manageLink.href = data.manageUrl;
@@ -249,9 +329,10 @@
           updatedAt.textContent = `업데이트: ${formatted}`;
         }
 
+        const delayMs = getGithubToken() ? REDIRECT_DELAY_MS : 3000;
         redirectTimer = window.setTimeout(() => {
           window.location.replace(data.url);
-        }, REDIRECT_DELAY_MS);
+        }, delayMs);
       }
 
       async function readLauncherState() {
@@ -301,6 +382,85 @@
         }
       }
 
+      async function githubApi(path, options = {}) {
+        const token = getGithubToken();
+        if (!token) {
+          throw new Error("GitHub token이 필요합니다");
+        }
+
+        const response = await fetch(`https://api.github.com${path}`, {
+          ...options,
+          headers: {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${token}`,
+            "X-GitHub-Api-Version": GITHUB_API_VERSION,
+            ...(options.headers || {}),
+          },
+        });
+
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(data?.message || `GitHub API ${response.status}`);
+        }
+        return data;
+      }
+
+      function isCodespaceAvailable(state) {
+        return String(state || "").toLowerCase() === "available";
+      }
+
+      function codespacePath(name) {
+        return `/user/codespaces/${encodeURIComponent(name)}`;
+      }
+
+      function renderCodespaceStatus(data) {
+        if (!data?.state) {
+          setCodespaceMessage("상태 확인 대기");
+          return;
+        }
+
+        if (isCodespaceAvailable(data.state)) {
+          setCodespaceMessage("Codespace가 켜져 있습니다");
+          return;
+        }
+
+        setCodespaceMessage(`Codespace 상태: ${data.state}`);
+      }
+
+      async function refreshCodespaceStatus(baseState) {
+        if (!baseState?.codespaceName || !getGithubToken()) {
+          updateTokenUi();
+          return null;
+        }
+
+        try {
+          const data = await githubApi(codespacePath(baseState.codespaceName));
+          renderCodespaceStatus(data);
+          return data;
+        } catch (error) {
+          setCodespaceMessage(error instanceof Error ? error.message : String(error));
+          return null;
+        } finally {
+          updateTokenUi();
+        }
+      }
+
+      function sleep(ms) {
+        return new Promise((resolve) => window.setTimeout(resolve, ms));
+      }
+
+      async function waitForCodespaceAvailable(name) {
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          const data = await githubApi(codespacePath(name));
+          renderCodespaceStatus(data);
+          if (isCodespaceAvailable(data.state)) {
+            return data;
+          }
+          await sleep(4000);
+        }
+        throw new Error("Codespace가 아직 준비되지 않았습니다");
+      }
+
       function parseCachedState() {
         try {
           const value = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
@@ -317,16 +477,26 @@
           const baseState = await readLauncherState();
           const liveState = await readLiveState(baseState);
           const data = liveState || baseState;
+          const codespaceStatus = await refreshCodespaceStatus(data);
 
           localStorage.setItem(CACHE_KEY, JSON.stringify(data));
           renderReady(data, "network");
+          if (codespaceStatus && !isCodespaceAvailable(codespaceStatus.state)) {
+            clearTimeout(redirectTimer);
+            message.textContent = "Codespace를 먼저 켜야 합니다";
+          }
         } catch {
           const cached = parseCachedState();
           if (cached) {
             const liveState = await readLiveState(cached);
             const data = liveState || cached;
+            const codespaceStatus = await refreshCodespaceStatus(data);
             localStorage.setItem(CACHE_KEY, JSON.stringify(data));
             renderReady(data, liveState ? "network" : "cache");
+            if (codespaceStatus && !isCodespaceAvailable(codespaceStatus.state)) {
+              clearTimeout(redirectTimer);
+              message.textContent = "Codespace를 먼저 켜야 합니다";
+            }
             return;
           }
 
@@ -334,12 +504,73 @@
         }
       }
 
+      async function startCodespace() {
+        if (!launcherState?.codespaceName) {
+          setCodespaceMessage("Codespace 이름을 찾을 수 없습니다");
+          return;
+        }
+
+        if (!getGithubToken()) {
+          tokenForm.hidden = false;
+          tokenInput.focus();
+          setCodespaceMessage("먼저 GitHub token을 저장하세요");
+          return;
+        }
+
+        clearTimeout(redirectTimer);
+        startCodespaceButton.disabled = true;
+        setCodespaceMessage("Codespace를 켜는 중");
+
+        try {
+          await githubApi(`${codespacePath(launcherState.codespaceName)}/start`, {
+            method: "POST",
+          });
+          setCodespaceMessage("Codespace 준비를 기다리는 중");
+          await waitForCodespaceAvailable(launcherState.codespaceName);
+          setCodespaceMessage("Codespace가 켜졌습니다");
+
+          if (isSafeFixedUrl(launcherState.fixedUrl)) {
+            window.location.href = launcherState.fixedUrl;
+          }
+        } catch (error) {
+          setCodespaceMessage(error instanceof Error ? error.message : String(error));
+          startCodespaceButton.disabled = false;
+        }
+      }
+
       retryButton.addEventListener("click", loadLatest);
+      startCodespaceButton.addEventListener("click", startCodespace);
+      tokenToggleButton.addEventListener("click", () => {
+        tokenForm.hidden = !tokenForm.hidden;
+        if (!tokenForm.hidden) {
+          tokenInput.value = getGithubToken();
+          tokenInput.focus();
+        }
+      });
+      tokenForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const token = tokenInput.value.trim();
+        if (token) {
+          localStorage.setItem(GITHUB_TOKEN_KEY, token);
+          tokenInput.value = "";
+          tokenForm.hidden = true;
+          setCodespaceMessage("GitHub token을 저장했습니다");
+          updateTokenUi();
+          refreshCodespaceStatus(launcherState);
+        }
+      });
+      clearTokenButton.addEventListener("click", () => {
+        localStorage.removeItem(GITHUB_TOKEN_KEY);
+        tokenInput.value = "";
+        setCodespaceMessage("GitHub token을 삭제했습니다");
+        updateTokenUi();
+      });
 
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("./launcher-sw.js").catch(() => {});
       }
 
+      updateTokenUi();
       loadLatest();
     </script>
   </body>

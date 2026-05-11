@@ -1,4 +1,4 @@
-const CACHE_NAME = "codexinphone-launcher-v1";
+const CACHE_NAME = "codexinphone-launcher-v2";
 const SHELL_ASSETS = [
   "./",
   "./manifest.webmanifest",
