@@ -51,6 +51,17 @@ type ManagedSession = {
   pendingApprovals: Map<string, PendingApproval>;
 };
 
+function writeTerminalInput(terminal: TerminalProcess, data: string): void {
+  const lineEnding = data.endsWith("\r\n") ? "\r\n" : data.endsWith("\r") ? "\r" : data.endsWith("\n") ? "\n" : "";
+  if (lineEnding && data.length > lineEnding.length) {
+    terminal.write(data.slice(0, -lineEnding.length));
+    setTimeout(() => terminal.write(lineEnding), 25);
+    return;
+  }
+
+  terminal.write(data);
+}
+
 export class SessionManager {
   private readonly sessions = new Map<string, ManagedSession>();
   private readonly listeners = new Set<SessionManagerEvents>();
@@ -195,7 +206,7 @@ export class SessionManager {
       return;
     }
 
-    session.terminal.write(data);
+    writeTerminalInput(session.terminal, data);
   }
 
   approve(approvalId: string, approved: boolean, ownerUserId: string): void {
@@ -210,7 +221,7 @@ export class SessionManager {
 
       session.pendingApprovals.delete(approvalId);
       if (approved && session.terminal && session.status === "running") {
-        session.terminal.write(pending.data);
+        writeTerminalInput(session.terminal, pending.data);
       }
       void appendSessionEvent(session.id, {
         type: "approval:resolved",
