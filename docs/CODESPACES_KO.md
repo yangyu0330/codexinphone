@@ -37,14 +37,15 @@ codex login --device-auth
 
 1. 휴대폰이나 PC에서 `https://github.com/codespaces`로 이동합니다.
 2. 기존 `codexinphone` Codespace를 Resume 합니다.
-3. 터미널에서 아래 명령을 실행합니다.
+3. Codespace가 켜지면 서버가 자동으로 시작됩니다. 1분 정도 기다린 뒤 앱 URL로 접속합니다.
+4. 자동 시작이 안 되면 터미널에서 아래 명령을 실행합니다.
 
 ```bash
-npm run codespaces:start
+npm run codespaces:start:bg
 ```
 
-4. 설치해둔 PWA 또는 Ports 탭의 `8787` URL로 접속합니다.
-5. 사용이 끝나면 GitHub Codespaces 화면에서 Stop을 누릅니다.
+5. 설치해둔 PWA 또는 Ports 탭의 `8787` URL로 접속합니다.
+6. 사용이 끝나면 GitHub Codespaces 화면에서 Stop을 누릅니다.
 
 ## 운영 방식
 

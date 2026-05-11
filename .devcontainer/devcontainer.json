@@ -15,6 +15,7 @@
     }
   },
   "postCreateCommand": "npm ci && npm install -g @openai/codex",
+  "postStartCommand": "bash scripts/start-codespaces-background.sh || true",
   "customizations": {
     "vscode": {
       "extensions": ["dbaeumer.vscode-eslint"]
