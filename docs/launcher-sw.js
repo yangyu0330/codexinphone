@@ -1,5 +1,11 @@
 const CACHE_NAME = "codexinphone-launcher-v1";
-const SHELL_ASSETS = ["./", "./manifest.webmanifest", "./icon.svg"];
+const SHELL_ASSETS = [
+  "./",
+  "./manifest.webmanifest",
+  "./icon.svg",
+  "./icon-192.png",
+  "./icon-512.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
