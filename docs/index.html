@@ -203,6 +203,7 @@
           <button class="primary" id="start-codespace-button" type="button">
             Codespace 켜기
           </button>
+          <button id="stop-codespace-button" type="button">Codespace 끄기</button>
           <button id="token-toggle-button" type="button">토큰 설정</button>
         </div>
         <form class="token-form" id="token-form" hidden>
@@ -235,7 +236,7 @@
       const CACHE_KEY = "codexinphone.latestLauncherState";
       const GITHUB_TOKEN_KEY = "codexinphone.githubCodespacesToken";
       const GITHUB_API_VERSION = "2026-03-10";
-      const REDIRECT_DELAY_MS = 700;
+      const REDIRECT_DELAY_MS = 2500;
       const FIRST_SETUP_REDIRECT_DELAY_MS = 10000;
 
       const stateLabel = document.querySelector("#state-label");
@@ -247,6 +248,7 @@
       const manageLink = document.querySelector("#manage-link");
       const codespaceMessage = document.querySelector("#codespace-message");
       const startCodespaceButton = document.querySelector("#start-codespace-button");
+      const stopCodespaceButton = document.querySelector("#stop-codespace-button");
       const tokenToggleButton = document.querySelector("#token-toggle-button");
       const tokenForm = document.querySelector("#token-form");
       const tokenInput = document.querySelector("#token-input");
@@ -255,6 +257,7 @@
 
       let redirectTimer = 0;
       let launcherState = null;
+      let autoRedirectPaused = false;
 
       function isSafeAppUrl(value) {
         try {
@@ -292,6 +295,14 @@
         codespaceMessage.textContent = text;
       }
 
+      function pauseAutoRedirect(text) {
+        autoRedirectPaused = true;
+        clearTimeout(redirectTimer);
+        if (text) {
+          message.textContent = text;
+        }
+      }
+
       function updateTokenUi() {
         const hasToken = Boolean(getGithubToken());
         tokenToggleButton.textContent = hasToken ? "토큰 변경" : "토큰 설정";
@@ -299,6 +310,7 @@
           ? "GitHub token이 이 기기에 저장되어 있습니다"
           : "처음 한 번 GitHub token을 저장하면 여기서 Codespace를 켤 수 있습니다";
         startCodespaceButton.disabled = !launcherState?.codespaceName;
+        stopCodespaceButton.disabled = !launcherState?.codespaceName || !hasToken;
       }
 
       function setOpenLink(url) {
@@ -338,10 +350,12 @@
           updatedAt.textContent = `업데이트: ${formatted}`;
         }
 
-        const delayMs = hasToken ? REDIRECT_DELAY_MS : FIRST_SETUP_REDIRECT_DELAY_MS;
-        redirectTimer = window.setTimeout(() => {
-          window.location.replace(data.url);
-        }, delayMs);
+        if (!autoRedirectPaused) {
+          const delayMs = hasToken ? REDIRECT_DELAY_MS : FIRST_SETUP_REDIRECT_DELAY_MS;
+          redirectTimer = window.setTimeout(() => {
+            window.location.replace(data.url);
+          }, delayMs);
+        }
       }
 
       async function readLauncherState() {
@@ -526,7 +540,7 @@
           return;
         }
 
-        clearTimeout(redirectTimer);
+        pauseAutoRedirect();
         startCodespaceButton.disabled = true;
         setCodespaceMessage("Codespace를 켜는 중");
 
@@ -547,11 +561,41 @@
         }
       }
 
+      async function stopCodespace() {
+        if (!launcherState?.codespaceName) {
+          setCodespaceMessage("Codespace 이름을 찾을 수 없습니다");
+          return;
+        }
+
+        if (!getGithubToken()) {
+          tokenForm.hidden = false;
+          tokenInput.focus();
+          setCodespaceMessage("먼저 GitHub token을 저장하세요");
+          return;
+        }
+
+        pauseAutoRedirect();
+        startCodespaceButton.disabled = true;
+        stopCodespaceButton.disabled = true;
+        setCodespaceMessage("Codespace를 끄는 중");
+
+        try {
+          await githubApi(`${codespacePath(launcherState.codespaceName)}/stop`, {
+            method: "POST",
+          });
+          setCodespaceMessage("Codespace stop 요청을 보냈습니다");
+        } catch (error) {
+          setCodespaceMessage(error instanceof Error ? error.message : String(error));
+        } finally {
+          updateTokenUi();
+        }
+      }
+
       retryButton.addEventListener("click", loadLatest);
       startCodespaceButton.addEventListener("click", startCodespace);
+      stopCodespaceButton.addEventListener("click", stopCodespace);
       tokenToggleButton.addEventListener("click", () => {
-        clearTimeout(redirectTimer);
-        message.textContent = "자동 이동을 멈췄습니다";
+        pauseAutoRedirect("자동 이동을 멈췄습니다");
         tokenForm.hidden = !tokenForm.hidden;
         if (!tokenForm.hidden) {
           tokenInput.value = getGithubToken();
