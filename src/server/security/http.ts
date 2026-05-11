@@ -10,6 +10,14 @@ import { logger } from "../logger.js";
 const stateChangingMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
 
+function isCodespacesTunnelOrigin(origin: URL): boolean {
+  return (
+    config.publicOriginUrl.hostname.endsWith(".app.github.dev") &&
+    origin.protocol === "https:" &&
+    origin.hostname === "github.dev"
+  );
+}
+
 export function requestLogger() {
   return pinoHttp<IncomingMessage, ServerResponse>({
     logger,
@@ -76,6 +84,10 @@ export function isAllowedOrigin(origin: string | undefined): boolean {
     return true;
   }
 
+  if (isCodespacesTunnelOrigin(parsed)) {
+    return true;
+  }
+
   return (
     !config.isProduction &&
     localHosts.has(parsed.hostname) &&
@@ -85,6 +97,11 @@ export function isAllowedOrigin(origin: string | undefined): boolean {
 
 export function sameOriginOnly(req: Request, res: Response, next: NextFunction): void {
   if (!stateChangingMethods.has(req.method)) {
+    next();
+    return;
+  }
+
+  if (config.authMode === "token" && req.method === "POST" && req.path === "/auth/token") {
     next();
     return;
   }
