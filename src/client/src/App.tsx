@@ -535,6 +535,35 @@ export function App() {
             ))}
           </div>
 
+          {config.codespace && (
+            <div className="codespaceBox">
+              <h2>Codespace</h2>
+              <span>{config.codespace.name || "GitHub Codespaces"}</span>
+              <a
+                className="ghostButton compact"
+                href={config.codespace.manageUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLink size={16} />
+                Manage
+              </a>
+              {config.codespace.canStop ? (
+                <button
+                  className="dangerButton compact"
+                  type="button"
+                  onClick={() => void requestCodespaceStop()}
+                  disabled={stoppingCodespace}
+                >
+                  {stoppingCodespace ? <Loader2 className="spin" size={16} /> : <Power size={16} />}
+                  Stop
+                </button>
+              ) : (
+                <small className="muted">Stop and Resume from GitHub.</small>
+              )}
+            </div>
+          )}
+
           <div className="keyStatus">
             <h2>AI Keys</h2>
             {Object.entries(config.aiEnvStatus).map(([key, present]) => (

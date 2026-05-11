@@ -319,9 +319,15 @@ input:focus {
 }
 
 .sessionList,
-.keyStatus {
+.keyStatus,
+.codespaceBox {
   display: grid;
   gap: 8px;
+}
+
+.codespaceBox span {
+  overflow-wrap: anywhere;
+  color: #e5e7eb;
 }
 
 .sessionItem {
