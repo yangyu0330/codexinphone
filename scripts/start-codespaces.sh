@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -f ".env.codespaces" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source ".env.codespaces"
+  set +a
+fi
+
 APP_PORT="${PORT:-8787}"
 APP_HOST="${HOST:-127.0.0.1}"
 

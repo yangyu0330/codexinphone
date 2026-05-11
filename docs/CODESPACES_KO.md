@@ -50,6 +50,7 @@ npm run codespaces:start
 
 - 코드는 작업이 끝날 때마다 commit/push 합니다.
 - API key, pairing token, session secret은 GitHub Codespaces secrets에만 둡니다.
+- 자동 실행을 위해 Codespace 안에 `.env.codespaces`를 둘 수 있습니다. 이 파일은 git에 올라가지 않습니다.
 - Codespaces는 상시 서버가 아니라 필요할 때 켜는 클라우드 작업환경으로 사용합니다.
 - 항상 켜진 고정 서버가 필요해지면 AWS EC2 stop/start 방식이나 Lightsail로 옮기는 것이 낫습니다.
 
