@@ -35,6 +35,24 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
+function launcherRedirectUrl(publicOrigin: string): string | undefined {
+  try {
+    const target = new URL(publicOrigin);
+    if (target.origin === window.location.origin) {
+      return undefined;
+    }
+    if (!window.location.hostname.endsWith(".app.github.dev")) {
+      return undefined;
+    }
+    target.pathname = "/";
+    target.search = "";
+    target.hash = "";
+    return target.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 export function App() {
   const terminalRef = useRef<TerminalPaneHandle | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -67,6 +85,10 @@ export function App() {
   const userId = user?.id;
   const connected = connection === "open";
   const canInstall = Boolean(installPrompt) && !standalone;
+  const redirectUrl = useMemo(
+    () => (config ? launcherRedirectUrl(config.publicOrigin) : undefined),
+    [config]
+  );
 
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
@@ -88,7 +110,7 @@ export function App() {
   );
 
   const connectSocket = useCallback(() => {
-    if (!userId) {
+    if (!userId || redirectUrl) {
       return;
     }
     socketRef.current?.close();
@@ -144,7 +166,7 @@ export function App() {
           break;
       }
     });
-  }, [userId]);
+  }, [redirectUrl, userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -173,11 +195,21 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (user) {
+    if (user && !redirectUrl) {
       connectSocket();
     }
     return () => socketRef.current?.close();
-  }, [connectSocket, user]);
+  }, [connectSocket, redirectUrl, user]);
+
+  useEffect(() => {
+    if (!redirectUrl) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      window.location.replace(redirectUrl);
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [redirectUrl]);
 
   useEffect(() => {
     function onBeforeInstallPrompt(event: Event) {
@@ -267,6 +299,36 @@ export function App() {
     return (
       <main className="loadingShell">
         <Loader2 className="spin" size={26} />
+      </main>
+    );
+  }
+
+  if (redirectUrl) {
+    return (
+      <main className="loginShell">
+        <section className="loginPanel" aria-label="Latest address launcher">
+          <div className="brandRow">
+            <span className="brandMark">
+              <RefreshCw className="spin" size={22} />
+            </span>
+            <div>
+              <h1>Opening Latest Address</h1>
+              <p>The fixed Codespaces URL is forwarding to the current phone URL.</p>
+            </div>
+          </div>
+          <div className="authActions">
+            <a className="primaryButton" href={redirectUrl}>
+              <TerminalIcon size={18} />
+              Open current app
+            </a>
+          </div>
+          <dl className="loginFacts">
+            <div>
+              <dt>Current</dt>
+              <dd>{config.publicOrigin}</dd>
+            </div>
+          </dl>
+        </section>
       </main>
     );
   }
