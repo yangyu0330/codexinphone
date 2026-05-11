@@ -103,6 +103,13 @@ ensure_server_origin() {
   fi
 }
 
+publish_launcher_url() {
+  local url="$1"
+  if [[ -n "${CIP_GITHUB_TOKEN:-}" ]]; then
+    bash scripts/publish-current-url.sh "${url}" || true
+  fi
+}
+
 start_tunnel
 url="$(wait_for_url)"
 if ! curl -fsS "http://127.0.0.1:${app_port}/health" >/dev/null 2>&1; then
@@ -115,6 +122,7 @@ if ! curl -fsS --max-time 10 "${url}/health" >/dev/null 2>&1; then
   url="$(wait_for_url)"
 fi
 ensure_server_origin "${url}"
+publish_launcher_url "${url}"
 
 echo "localhost.run tunnel ready: ${url}"
 echo "server pid: $(cat "${server_pid_file}" 2>/dev/null || true)"
