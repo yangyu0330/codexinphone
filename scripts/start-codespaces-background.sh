@@ -5,7 +5,16 @@ cd "$(dirname "$0")/.."
 
 mkdir -p logs .codexinphone
 
-if curl -fsS http://127.0.0.1:${PORT:-8787}/health >/dev/null 2>&1; then
+if [[ -f ".env.codespaces" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source ".env.codespaces"
+  set +a
+fi
+
+app_port="${PORT:-8787}"
+
+if [[ "${FORCE_RESTART:-0}" != "1" ]] && curl -fsS "http://127.0.0.1:${app_port}/health" >/dev/null 2>&1; then
   echo "Codex in Phone is already running."
   exit 0
 fi
@@ -17,11 +26,15 @@ if [[ -f ".codexinphone/codespaces-server.pid" ]]; then
   fi
 fi
 
+if command -v fuser >/dev/null 2>&1; then
+  fuser -k "${app_port}/tcp" >/dev/null 2>&1 || true
+fi
+
 nohup npm run codespaces:start > logs/codespaces-server.log 2>&1 &
 echo "$!" > .codexinphone/codespaces-server.pid
 
 for _ in $(seq 1 60); do
-  if curl -fsS http://127.0.0.1:${PORT:-8787}/health >/dev/null 2>&1; then
+  if curl -fsS "http://127.0.0.1:${app_port}/health" >/dev/null 2>&1; then
     echo "Codex in Phone started."
     exit 0
   fi
