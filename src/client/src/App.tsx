@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   Download,
+  ExternalLink,
   KeyRound,
   Loader2,
   LogOut,
   Play,
+  Power,
   RefreshCw,
   Send,
   ShieldAlert,
@@ -17,7 +19,7 @@ import {
   WifiOff,
   X
 } from "lucide-react";
-import { getConfig, getMe, loginWithToken, logout } from "./api";
+import { getConfig, getMe, loginWithToken, logout, stopCodespace } from "./api";
 import { TerminalPane, type TerminalPaneHandle } from "./components/TerminalPane";
 import type {
   ApprovalRequest,
@@ -70,6 +72,8 @@ export function App() {
   const [mobileInput, setMobileInput] = useState("");
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [lastError, setLastError] = useState<string | undefined>();
+  const [systemMessage, setSystemMessage] = useState<string | undefined>();
+  const [stoppingCodespace, setStoppingCodespace] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [standalone, setStandalone] = useState(
     () =>
@@ -295,6 +299,31 @@ export function App() {
     setActiveSessionId(undefined);
   }
 
+  async function requestCodespaceStop() {
+    const activeConfig = config;
+    if (!activeConfig?.codespace?.canStop || stoppingCodespace) {
+      return;
+    }
+    const confirmed = window.confirm(
+      "Stop this GitHub Codespace now? The phone app will disconnect. Start it again from GitHub Codespaces when you need it."
+    );
+    if (!confirmed) {
+      return;
+    }
+    setStoppingCodespace(true);
+    setLastError(undefined);
+    try {
+      await stopCodespace();
+      setSystemMessage("Codespace stop requested. Reopen it from GitHub Codespaces when needed.");
+      window.setTimeout(() => {
+        window.location.href = activeConfig.codespace?.manageUrl || "https://github.com/codespaces";
+      }, 1500);
+    } catch (error) {
+      setLastError(error instanceof Error ? error.message : String(error));
+      setStoppingCodespace(false);
+    }
+  }
+
   if (loading || !config) {
     return (
       <main className="loadingShell">
@@ -424,6 +453,28 @@ export function App() {
           {canInstall && (
             <button className="iconButton" type="button" onClick={() => void installApp()} title="Install app">
               <Download size={18} />
+            </button>
+          )}
+          {config.codespace && (
+            <a
+              className="iconButton"
+              href={config.codespace.manageUrl}
+              target="_blank"
+              rel="noreferrer"
+              title="Manage Codespace"
+            >
+              <ExternalLink size={18} />
+            </a>
+          )}
+          {config.codespace?.canStop && (
+            <button
+              className="iconButton dangerIcon"
+              type="button"
+              onClick={() => void requestCodespaceStop()}
+              title="Stop Codespace"
+              disabled={stoppingCodespace}
+            >
+              {stoppingCodespace ? <Loader2 className="spin" size={18} /> : <Power size={18} />}
             </button>
           )}
           <button className="iconButton" type="button" onClick={() => void doLogout()} title="Logout">
@@ -559,6 +610,7 @@ export function App() {
             </button>
           </form>
 
+          {systemMessage && <p className="infoText">{systemMessage}</p>}
           {lastError && <p className="errorText">{lastError}</p>}
         </section>
       </section>

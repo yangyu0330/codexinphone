@@ -45,3 +45,7 @@ export async function loginWithToken(token: string): Promise<UserInfo> {
 export async function logout(): Promise<void> {
   await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
 }
+
+export async function stopCodespace(): Promise<void> {
+  await fetchJson<{ ok: true }>("/api/codespace/stop", { method: "POST" });
+}

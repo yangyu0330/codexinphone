@@ -7,6 +7,7 @@ import { loginWithPairingToken, logout, requireAuth, currentUser } from "./auth/
 import { registerGithubAuth } from "./auth/github.js";
 import { ensureDataDirs } from "./sessions/audit-log.js";
 import { createWebSocketServer, validateWebSocketUpgrade } from "./ws.js";
+import { stopCurrentCodespace } from "./codespace-control.js";
 import {
   apiRateLimiter,
   authRateLimiter,
@@ -48,6 +49,14 @@ app.get("/api/me", (req, res) => {
 app.use("/auth", authRateLimiter);
 app.post("/auth/token", loginWithPairingToken);
 app.post("/api/logout", requireAuth, logout);
+app.post("/api/codespace/stop", requireAuth, async (_req, res, next) => {
+  try {
+    await stopCurrentCodespace();
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
 registerGithubAuth(app);
 
 const clientDist = path.join(process.cwd(), "dist", "client");

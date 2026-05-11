@@ -17,6 +17,12 @@ export type PublicConfig = {
   codexArgs: string[];
   aiEnvStatus: Record<string, boolean>;
   tunnelHint: string;
+  codespace?: {
+    name?: string;
+    canStop: boolean;
+    manageUrl: string;
+    fixedUrl?: string;
+  };
 };
 
 export type TerminalStream = "stdout" | "stderr" | "system";

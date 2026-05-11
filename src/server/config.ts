@@ -128,6 +128,11 @@ const publicOriginUrl = new URL(publicOrigin);
 const cookieSecure = (process.env.COOKIE_SECURE ?? "").trim()
   ? process.env.COOKIE_SECURE === "true"
   : publicOrigin.startsWith("https://");
+const codespaceName = process.env.CODESPACE_NAME?.trim() || "";
+const codespacePortDomain = process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN?.trim() || "app.github.dev";
+const codespaceFixedUrl = codespaceName
+  ? `https://${codespaceName}-${port}.${codespacePortDomain}`
+  : "";
 
 if (!isPathInsideRoots(defaultCwd, normalizedRoots)) {
   throw new Error("DEFAULT_CWD must be inside one of WORKSPACE_ROOTS.");
@@ -172,6 +177,18 @@ export const config = {
     args: parseArgs(process.env.CODEX_ARGS),
     workspaceRoots: normalizedRoots,
     defaultCwd
+  },
+  codespace: {
+    enabled: process.env.CODESPACES === "true" || Boolean(codespaceName),
+    name: codespaceName,
+    controlToken:
+      process.env.CODESPACES_CONTROL_TOKEN?.trim() ||
+      process.env.GITHUB_CODESPACES_TOKEN?.trim() ||
+      "",
+    fixedUrl: codespaceFixedUrl,
+    manageUrl: codespaceName
+      ? `https://github.com/codespaces/${encodeURIComponent(codespaceName)}`
+      : "https://github.com/codespaces"
   },
   security: {
     apiRateLimitWindowMs: intFromEnv("API_RATE_LIMIT_WINDOW_MS", 60_000),
@@ -237,6 +254,14 @@ export function publicConfig(): PublicConfig {
     codexCommand: config.codex.command,
     codexArgs: [...config.codex.args],
     aiEnvStatus: Object.fromEntries(aiEnvKeys.map((key) => [key, Boolean(process.env[key])])),
-    tunnelHint: "Use Tailscale or Cloudflare Tunnel; keep this server bound to 127.0.0.1 by default."
+    tunnelHint: "Use Tailscale or Cloudflare Tunnel; keep this server bound to 127.0.0.1 by default.",
+    codespace: config.codespace.enabled
+      ? {
+          name: config.codespace.name || undefined,
+          canStop: Boolean(config.codespace.name && config.codespace.controlToken),
+          manageUrl: config.codespace.manageUrl,
+          fixedUrl: config.codespace.fixedUrl || undefined
+        }
+      : undefined
   };
 }
